@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>资源产量计算器</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+    table {
+      border-collapse: collapse;
+      margin-bottom: 20px;
+      width: 100%;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 8px;
+      text-align: center;
+    }
+    th {
+      background-color: #f4f4f4;
+    }
+    input[type="text"] {
+      width: 100%;
+      box-sizing: border-box;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      margin-right: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>资源产量计算器</h1>
+  <p>填写资源点数据（最多支持5组数据），点击“计算”即可自动获取差值、时间差与产量。</p>
+  <table id="inputTable">
+    <thead>
+      <tr>
+        <th>时间点</th>
+        <th>木</th>
+        <th>泥</th>
+        <th>铁</th>
+        <th>粮</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td><input type="text" placeholder="hh:mm:ss"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
+      <tr><td><input type="text" placeholder="hh:mm:ss"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
+      <tr><td><input type="text" placeholder="hh:mm:ss"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
+      <tr><td><input type="text" placeholder="hh:mm:ss"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
+      <tr><td><input type="text" placeholder="hh:mm:ss"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td><td><input type="text"></td></tr>
+    </tbody>
+  </table>
+
+  <button onclick="calculate()">计算</button>
+  <button onclick="exportExcel()">导出 Excel</button>
+
+  <h2>计算结果</h2>
+  <div id="results"></div>
+
+  <h2>汇总</h2>
+  <div id="summary"></div>
+
+  <script>
+    function parseTime(t) {
+      const parts = t.split(":").map(Number);
+      return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    }
+
+    let lastResultTable = "";
+    let lastSummaryTable = "";
+
+    function calculate() {
+      const rows = document.querySelectorAll("#inputTable tbody tr");
+      const data = [];
+      for (let row of rows) {
+        const inputs = row.querySelectorAll("input");
+        const time = inputs[0].value;
+        if (!time) continue;
+        data.push({
+          time: parseTime(time),
+          wood: Number(inputs[1].value),
+          clay: Number(inputs[2].value),
+          iron: Number(inputs[3].value),
+          grain: Number(inputs[4].value),
+          rawTime: time
+        });
+      }
+
+      let html = "<table border='1'><thead><tr><th>起点 → 终点</th><th>时间差(分)</th><th>资源</th><th>差值</th><th>每分钟产量</th><th>每小时产量</th></tr></thead><tbody>";
+
+      const total = {
+        wood: 0,
+        clay: 0,
+        iron: 0,
+        grain: 0,
+        time: 0
+      };
+
+      for (let i = 1; i < data.length; i++) {
+        const dt = (data[i].time - data[i - 1].time) / 60;
+        total.time += dt;
+        const label = `${data[i - 1].rawTime} → ${data[i].rawTime}`;
+        const keys = ["wood", "clay", "iron", "grain"];
+        const names = { wood: "木", clay: "泥", iron: "铁", grain: "粮" };
+
+        for (let key of keys) {
+          const delta = data[i][key] - data[i - 1][key];
+          total[key] += delta;
+          const perMin = (delta / dt).toFixed(2);
+          const perHour = (delta / dt * 60).toFixed(1);
+          html += `<tr><td>${label}</td><td>${dt.toFixed(2)}</td><td>${names[key]}</td><td>${delta}</td><td>${perMin}</td><td>${perHour}</td></tr>`;
+        }
+      }
+      html += "</tbody></table>";
+      lastResultTable = html;
+      document.getElementById("results").innerHTML = html;
+
+      // 汇总部分
+      let summary = `<table border='1'><thead><tr><th>资源</th><th>总差值</th><th>平均每分钟</th><th>平均每小时</th></tr></thead><tbody>`;
+      const names = { wood: "木", clay: "泥", iron: "铁", grain: "粮" };
+      for (let key of ["wood", "clay", "iron", "grain"]) {
+        const avgPerMin = (total[key] / total.time).toFixed(2);
+        const avgPerHour = (total[key] / total.time * 60).toFixed(1);
+        summary += `<tr><td>${names[key]}</td><td>${total[key]}</td><td>${avgPerMin}</td><td>${avgPerHour}</td></tr>`;
+      }
+      summary += `</tbody></table><p>总时间：${total.time.toFixed(2)} 分钟</p>`;
+      lastSummaryTable = summary;
+      document.getElementById("summary").innerHTML = summary;
+    }
+
+    function exportExcel() {
+      const tableHTML = lastResultTable + "<br><br>" + lastSummaryTable;
+      const blob = new Blob([`﻿<html><head><meta charset='UTF-8'></head><body>${tableHTML}</body></html>`], { type: 'application/vnd.ms-excel' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "资源产量计算结果.xls";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    }
+  </script>
+</body>
+</html>
